@@ -1,0 +1,7 @@
+build
+build.*/
+CMakeCache.txt
+CMakeFiles/
+.cache
+.task
+*.rom

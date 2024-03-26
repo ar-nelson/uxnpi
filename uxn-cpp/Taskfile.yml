@@ -1,0 +1,47 @@
+version: '3'
+
+tasks:
+  cmake-debug:
+    desc: 🏗️ Set up CMake debug build directory in build.debug/
+    sources:
+      - CMakeLists.txt
+    cmds:
+      - cmake -H. -Bbuild.debug -GNinja -DCMAKE_BUILD_TYPE=Debug
+      - rm -f build
+      - ln -s build.debug build
+    generates:
+      - build.debug/build.ninja
+  cmake-release:
+    desc: 🏗️ Set up CMake release build directory in build.release/
+    sources:
+      - CMakeLists.txt
+    cmds:
+      - cmake -H. -Bbuild.release -GNinja -DCMAKE_BUILD_TYPE=Release
+      - rm -f build
+      - ln -s build.release build
+    generates:
+      - build.release/build.ninja
+  build-debug:
+    desc: 🔧 Build in debug mode, along with unit tests, in build.debug/
+    deps:
+      - cmake-debug
+    sources:
+      - '*.cpp'
+      - '*.hpp'
+      - CMakeLists.txt
+    cmds:
+      - ninja -C build.debug
+    generates:
+      - build.debug/uxn_sdl
+  build-release:
+    desc: 🔧 Build in release mode, in build.release/
+    deps:
+      - cmake-release
+    sources:
+      - '*.cpp'
+      - '*.hpp'
+      - CMakeLists.txt
+    cmds:
+      - ninja -C build.release
+    generates:
+      - build.release/uxn_sdl
