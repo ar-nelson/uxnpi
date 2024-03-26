@@ -12,6 +12,8 @@
 #include <circle/usb/usbhcidevice.h>
 #include <circle/usb/usbgamepad.h>
 #include <circle/types.h>
+#include <SDCard/emmc.h>
+#include <circle/fs/fat/fatfs.h>
 #include "ppu.hpp"
 #include "uxn.h"
 
@@ -74,6 +76,8 @@ private:
   CTimer              timer;
   CLogger             logger;
   CUSBHCIDevice       usb_hci;
+  CEMMCDevice         emmc;
+  CFATFileSystem      fs;
 
   CUSBGamePadDevice* volatile game_pad;
   bool game_pad_known;

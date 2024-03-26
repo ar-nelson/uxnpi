@@ -5,10 +5,11 @@
 
 extern "C" {
 #include "uxn-fast.c"
-#include "rom.c"
 }
 
 #define DEVICE_INDEX  1    // "upad1"
+#define PARTITION     "emmc1-1"
+#define FILENAME      "catclock.rom"
 
 RaspiKernel* RaspiKernel::instance = 0;
 UxnKernel* UxnKernel::instance = 0;
@@ -18,10 +19,10 @@ static const char FromUxn[] = "uxn";
 
 RaspiKernel::RaspiKernel() :
   screen(640, 480), timer(&interrupt), logger(options.GetLogLevel(), &timer),
-  usb_hci(&interrupt, &timer, TRUE /* TRUE = enable PnP */), game_pad(0)
+  usb_hci(&interrupt, &timer, TRUE /* TRUE = enable PnP */),
+  emmc(&interrupt, &timer, &act_led), game_pad(0)
 {
   instance = this;
-  act_led.Blink(5);  // show we are alive
 }
 
 RaspiKernel::~RaspiKernel() {
@@ -44,6 +45,26 @@ bool RaspiKernel::initialize() {
   if (OK) OK = interrupt.Initialize();
   if (OK) OK = timer.Initialize();
   if (OK) OK = usb_hci.Initialize();
+  if (OK) OK = emmc.Initialize();
+
+  CDevice* partition;
+  if (OK) {
+    partition = device_name_service.GetDevice(PARTITION, TRUE);
+    if (partition == 0) {
+      logger.Write(FromKernel, LogPanic, "Partition not found: %s", PARTITION);
+      OK = 0;
+    } else {
+      logger.Write(FromKernel, LogNotice, "Got partition");
+    }
+  }
+  if (OK) {
+    OK = fs.Mount(partition);
+    if (!OK) {
+      logger.Write(FromKernel, LogPanic, "Cannot mount partition: %s", PARTITION);
+    } else {
+      logger.Write(FromKernel, LogNotice, "Mounted partition");
+    }
+  }
 
   return OK;
 }
@@ -130,7 +151,7 @@ void UxnKernel::console_talk(Device* d, u8 b0, u8 w) {
 
 void UxnKernel::system_talk(Device* d, u8 b0, u8 w) {
   assert(instance != 0);
-  instance->logger.Write(FromUxn, LogNotice, "system_talk");
+  //instance->logger.Write(FromUxn, LogNotice, "system_talk");
   if(!w) { /* read */
     switch(b0) {
     case 0x2: d->dat[0x2] = d->u->wst.ptr; break;
@@ -193,6 +214,39 @@ void UxnKernel::file_talk(Device *d, u8 b0, u8 w) {
 ShutdownMode RaspiKernel::run() {
   logger.Write(FromKernel, LogNotice, "Compile time: " __DATE__ " " __TIME__);
 
+  // Load a ROM from the SD card.
+  u8 *rom = new u8[0xffff], *rom_next = rom;
+  size_t rom_size = 0;
+  logger.Write(FromKernel, LogNotice, "Opening file " FILENAME);
+  auto file = fs.FileOpen(FILENAME);
+  if (!file) {
+    logger.Write(FromKernel, LogPanic, "Failed to open " FILENAME);
+    timer.MsDelay(500);
+    return ShutdownHalt;
+  }
+  while (true) {
+    logger.Write(FromKernel, LogNotice, "Reading bytes...");
+    auto bytes_read = fs.FileRead(file, rom_next, 0xffff);
+    logger.Write(FromKernel, LogNotice, "Read %d bytes", bytes_read);
+    if (bytes_read == 0) break;
+    else if (bytes_read == FS_ERROR) {
+      logger.Write(FromKernel, LogPanic, "Failed to read ROM");
+      timer.MsDelay(500);
+      fs.FileClose(file);
+      return ShutdownHalt;
+    }
+    rom_size += bytes_read;
+    rom_next += bytes_read;
+    if (rom_size > 0xffff) {
+      logger.Write(FromKernel, LogPanic, "ROM is too large (max 65536 bytes)");
+      timer.MsDelay(500);
+      fs.FileClose(file);
+      return ShutdownHalt;
+    }
+  }
+  logger.Write(FromKernel, LogNotice, "Done, total %d bytes", rom_size);
+  fs.FileClose(file);
+
   // Try to get a gamepad ONCE.
   // TODO: This probably doesn't need PnP.
 
@@ -234,7 +288,8 @@ no_gamepad:;
 
   // Enter the uxn interpreter
   {
-    UxnKernel uxn(*this, reinterpret_cast<const u8*>(uxn_rom), sizeof(uxn_rom));
+    UxnKernel uxn(*this, rom, static_cast<u16>(rom_size));
+    delete rom;
     uxn.run();
   }
 
