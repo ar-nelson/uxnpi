@@ -2,15 +2,17 @@
 
 CIRCLEHOME = ./circle
 
-OBJS	= main.o kernel.o ppu.o
+OBJS	= main.o kernel.o circle_varvara.o uxn-cpp/uxn.o
 
 LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/input/libinput.a \
 	  $(CIRCLEHOME)/addon/SDCard/libsdcard.a \
+	  $(CIRCLEHOME)/addon/fatfs/libfatfs.a \
 	  $(CIRCLEHOME)/lib/fs/libfs.a \
 	  $(CIRCLEHOME)/lib/fs/fat/libfatfs.a \
 	  $(CIRCLEHOME)/lib/libcircle.a
 
+# change this to empty string to build for actual hardware
 FOR_QEMU = --qemu
 
 include $(CIRCLEHOME)/Rules.mk
@@ -23,6 +25,7 @@ $(CIRCLEHOME)/Config.mk:
 $(LIBS): $(CIRCLEHOME)/Config.mk
 	cd $(CIRCLEHOME) && ./makeall
 	cd $(CIRCLEHOME)/addon/SDCard && make
+	cd $(CIRCLEHOME)/addon/fatfs && make
 
 libs: $(LIBS)
 
@@ -38,5 +41,6 @@ clean:
 # qemu-raspi is the special build of qemu for circle USB support
 run: $(LIBS) kernel8.img roms.img
 	sudo /usr/local/cross-aarch64/bin/qemu-rpi \
-		-M raspi3 -kernel kernel8.img -serial null -serial stdio -device usb-host,vendorid=0x045e,productid=0x0b12 \
+		-M raspi3 -kernel kernel8.img -serial stdio \
+		-device usb-host,vendorid=0x045e,productid=0x0b12 \
 		-drive file=roms.img,format=raw,if=sd,id=sd0

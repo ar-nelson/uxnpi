@@ -1,0 +1,2 @@
+CompileFlags:
+  Add: [-nostdlib, -I./circle/include/, -I./circle/addon/]

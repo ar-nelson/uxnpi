@@ -2,9 +2,9 @@
 #include <circle/startup.h>
 
 int main(void) {
-  // cannot return here because some destructors used in RaspiKernel are not implemented
+  // cannot return here because some destructors used in CKernel are not implemented
 
-  RaspiKernel Kernel;
+  CKernel Kernel;
   if (!Kernel.initialize()) {
     halt();
     return EXIT_HALT;

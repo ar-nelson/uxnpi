@@ -238,6 +238,7 @@ public:
   }
 
 protected:
+  Pixel palette[4];
   PixelScreen(Uxn& uxn, u16 width, u16 height) : Screen(uxn, width, height) {
     bg = new u8[w * h];
     fg = new u8[w * h];
@@ -274,7 +275,7 @@ private:
 
   u16 screen_x1, screen_y1, screen_x2, screen_y2;
   u8 *fg, *bg;
-  Pixel palette[4], *pixels;
+  Pixel* pixels;
 
   void change(u16 x1, u16 y1, u16 x2, u16 y2) {
     if (x1 > w && x2 > x1) return;
@@ -560,6 +561,7 @@ public:
         poke2(dev + 0xa2, remove());
         return;
       case 0xa9: {
+        close();
         read_state = ReadState::NotReading;
         dir_entry_end = dir_entry_start = 0;
         auto name = uxn.null_terminated_string_in_ram(peek2(dev + 0xa8));
@@ -567,7 +569,6 @@ public:
         if (max > UXN_PATH_MAX) max = UXN_PATH_MAX;
         for (u16 i = 0; i < max; i++) open_filename[i] = name[i];
         open_filename[max] = '\0';
-        open();
         poke2(dev + 0xa2, 1);
         return;
       }
@@ -616,7 +617,7 @@ protected:
   Uxn& uxn;
   char open_filename[UXN_PATH_MAX] = {0};
 
-  virtual void open() = 0;
+  virtual void close() = 0;
   virtual u16 read(MutableSlice dest) = 0;
   virtual Stat stat() = 0;
   virtual bool list_dir(Stat& out) = 0;

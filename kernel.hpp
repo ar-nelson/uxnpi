@@ -1,21 +1,8 @@
 #pragma once
 
+#include "circle_varvara.hpp"
 #include <circle/actled.h>
-#include <circle/koptions.h>
-#include <circle/devicenameservice.h>
-#include <circle/screen.h>
-#include <circle/serial.h>
-#include <circle/exceptionhandler.h>
-#include <circle/interrupt.h>
-#include <circle/timer.h>
-#include <circle/logger.h>
-#include <circle/usb/usbhcidevice.h>
-#include <circle/usb/usbgamepad.h>
-#include <circle/types.h>
 #include <SDCard/emmc.h>
-#include <circle/fs/fat/fatfs.h>
-#include "ppu.hpp"
-#include "uxn.h"
 
 enum ShutdownMode {
   ShutdownNone,
@@ -23,36 +10,10 @@ enum ShutdownMode {
   ShutdownReboot
 };
 
-class RaspiKernel;
-
-class UxnKernel {
+class CKernel {
 public:
-  UxnKernel(RaspiKernel& kernel, const u8* rom, u16 rom_size);
-  ~UxnKernel();
-
-  bool run();
-private:
-  static void nil_talk(Device* d, u8 b0, u8 w);
-  static void console_talk(Device* d, u8 b0, u8 w);
-  static void system_talk(Device* d, u8 b0, u8 w);
-  static void screen_talk(Device* d, u8 b0, u8 w);
-  static void audio_talk(Device* d, u8 b0, u8 w);
-  static void datetime_talk(Device* d, u8 b0, u8 w);
-  static void file_talk(Device* d, u8 b0, u8 w);
-
-  Uxn u;
-  Ppu ppu;
-  Device *devscreen, *devctrl, *devmouse, *devaudio;
-  CTimer& timer;
-  CLogger& logger;
-
-  static UxnKernel* instance;
-};
-
-class RaspiKernel {
-public:
-  RaspiKernel();
-  ~RaspiKernel();
+  CKernel();
+  ~CKernel();
 
   bool initialize();
 
@@ -70,6 +31,7 @@ private:
   CKernelOptions      options;
   CDeviceNameService  device_name_service;
   CScreenDevice       screen;
+  C2DGraphics         gfx;
   CSerialDevice       serial;
   CExceptionHandler   exception_handler;
   CInterruptSystem    interrupt;
@@ -77,13 +39,11 @@ private:
   CLogger             logger;
   CUSBHCIDevice       usb_hci;
   CEMMCDevice         emmc;
-  CFATFileSystem      fs;
+  FATFS               fs;
 
   CUSBGamePadDevice* volatile game_pad;
-  bool game_pad_known;
   TGamePadState game_pad_state;
 
-  int pos_x, pos_y;
-
-  static RaspiKernel* instance;
+  uxn::CircleVarvara* varvara = nullptr;
+  static CKernel* instance;
 };

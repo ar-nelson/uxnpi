@@ -33,7 +33,7 @@ public:
   const u8* load(const char* filename, size_t& out_size) final;
 
 protected:
-  void open() final { open_file = std::monostate(); }
+  void close() final { open_file = std::monostate(); }
   Stat stat() final;
   bool list_dir(Stat& out) final;
   u16 read(MutableSlice dest) final;

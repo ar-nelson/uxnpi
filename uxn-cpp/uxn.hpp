@@ -1,5 +1,5 @@
 #pragma once
-#include "../shorthand.h"
+#include "shorthand.h"
 
 namespace uxn {
 
