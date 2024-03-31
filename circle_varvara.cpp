@@ -84,7 +84,6 @@ done:
 
 const u8* CircleFilesystem::load(const char* filename, size_t& out_size) {
   const char* path = absolute_filename(filename);
-  logger.Write("File", LogNotice, "Loading ROM %s at path %s", filename, path);
   FIL fil;
   if (f_open(&fil, path, FA_READ) != FR_OK) {
     logger.Write("File", LogError, "ROM %s does not exist or cannot be opened", filename);
@@ -102,7 +101,6 @@ const u8* CircleFilesystem::load(const char* filename, size_t& out_size) {
   }
   f_close(&fil);
   out_size = sz;
-  logger.Write("File", LogNotice, "Successfully loaded %d bytes", sz);
   return loaded_rom;
 }
 
@@ -139,7 +137,11 @@ static inline void filinfo_to_stat(FILINFO& filinfo, Stat& stat) {
 
 Stat CircleFilesystem::stat() {
   close();
-  if (f_stat(absolute_filename(open_filename), &last_filinfo) != FR_OK) {
+  const char* path = absolute_filename(open_filename);
+  if (path[0] == '/' && path[1] == '\0') {
+    // Root directory is a special case in FatFS, cannot stat it
+    return Stat{ .type = StatType::Directory, .size = 0, .name = "/" };
+  } else if (f_stat(path, &last_filinfo) != FR_OK) {
     return Stat{ .type = StatType::Unavailable, .size = 0, .name = open_filename };
   }
   Stat s;
@@ -155,6 +157,7 @@ bool CircleFilesystem::list_dir(Stat& out) {
     open_state = OpenState::ReadDir;
   }
   if (f_readdir(&open_file.dir, &last_filinfo) != FR_OK) return false;
+  if (last_filinfo.fname[0] == 0) return false;
   filinfo_to_stat(last_filinfo, out);
   return true;
 }
@@ -212,10 +215,10 @@ u8 CircleDatetime::datetime_byte(u8 port) {
 }
 
 void CircleVarvara::game_pad_input(const TGamePadState* state) {
-  //if (state->buttons & TGamePadButton::GamePadButtonGuide) {
-  //  reset(false);
-  //  return;
-  //}
+  if (state->buttons & TGamePadButton::GamePadButtonGuide) {
+    reset(false);
+    return;
+  }
 
   // just skip input methods completely,
   // and write directly to the device buffer
@@ -232,12 +235,21 @@ void CircleVarvara::game_pad_input(const TGamePadState* state) {
   console.flush();
 }
 
-void CircleVarvara::run() {
+ShutdownMode CircleVarvara::run(SafeShutdown* safe_shutdown) {
+  ShutdownMode m = ShutdownMode::None;
+  if (safe_shutdown) {
+    m = safe_shutdown->shutdown_mode();
+    if (m != ShutdownMode::None) return m;
+  }
   eval(PAGE_PROGRAM);
   screen.repaint();
   console.flush();
   u64 current_ticks = timer.GetClockTicks64();
   while (true) {
+    if (safe_shutdown) {
+      m = safe_shutdown->shutdown_mode();
+      if (m != ShutdownMode::None) return m;
+    }
     screen.frame();
     console.flush();
 

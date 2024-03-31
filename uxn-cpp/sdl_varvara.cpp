@@ -192,29 +192,16 @@ void SdlVarvara::set_debugger(u8 value) {
 }
 
 bool SdlVarvara::init() {
-  //SDL_AudioSpec as;
-  //SDL_zero(as);
-  //as.freq = SAMPLE_FREQUENCY;
-  //as.format = AUDIO_S16SYS;
-  //as.channels = 2;
-  //as.callback = audio_handler;
-  //as.samples = AUDIO_BUFSIZE;
-  //as.userdata = this;
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
     error_message("sdl", SDL_GetError());
     return false;
   }
-  //audio_id = SDL_OpenAudioDevice(nullptr, 0, &as, nullptr, 0);
-  //if (!audio_id) {
-  //  out_system_error("sdl_audio", SDL_GetError());
-  //  return false;
-  //}
   if (SDL_NumJoysticks() > 0 && SDL_JoystickOpen(0) == nullptr) {
     error_message("sdl_joystick", SDL_GetError());
     return false;
   }
   if (!stdin_event) stdin_event = SDL_RegisterEvents(1);
-  //if (!audio0_event) audio0_event = SDL_RegisterEvents(POLYPHONY);
+  if (!audio0_event) audio0_event = SDL_RegisterEvents(POLYPHONY);
   SDL_DetachThread(stdin_thread = SDL_CreateThread(stdin_handler, "stdin", nullptr));
   SDL_StartTextInput();
   SDL_ShowCursor(SDL_DISABLE);
@@ -222,7 +209,6 @@ bool SdlVarvara::init() {
   ms_interval = SDL_GetPerformanceFrequency() / 1000;
   deadline_interval = ms_interval * TIMEOUT_MS;
   exec_deadline = SDL_GetPerformanceCounter() + deadline_interval;
-  //SDL_PauseAudioDevice(audio_id, 1);
   return Varvara::init();
 }
 
@@ -260,7 +246,6 @@ u8 SdlVarvara::run() {
 
 SdlVarvara::~SdlVarvara() {
   /* cleanup */
-  //SDL_CloseAudioDevice(audio_id);
 #ifdef _WIN32
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
   TerminateThread((HANDLE)SDL_GetThreadID(stdin_thread), 0);

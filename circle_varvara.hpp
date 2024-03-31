@@ -11,10 +11,12 @@
 #include <circle/logger.h>
 #include <circle/usb/usbhcidevice.h>
 #include <circle/usb/usbgamepad.h>
+#include <circle/sound/soundbasedevice.h>
 #include <circle/types.h>
 #include <fatfs/ff.h>
 
 #include "uxn-cpp/varvara.hpp"
+#include "safe_shutdown.hpp"
 
 namespace uxn {
 
@@ -30,42 +32,81 @@ public:
 
 class CircleScreen : public PixelScreen<TScreenColor> {
   C2DGraphics& gfx;
-  u16 offset_x, offset_y, max_w, max_h;
+  u16 offset_x, offset_y;
+  u8 zoom;
 public:
   CircleScreen(Uxn& uxn, C2DGraphics& gfx) :
     PixelScreen<TScreenColor>(uxn, gfx.GetWidth(), gfx.GetHeight()),
-    gfx(gfx), offset_x(0), offset_y(0), max_w(gfx.GetWidth()), max_h(gfx.GetHeight()) {}
+    gfx(gfx), offset_x(0), offset_y(0), zoom(1) {}
   void try_resize(u16 width, u16 height) final {
+    auto max_w = gfx.GetWidth(), max_h = gfx.GetHeight();
     PixelScreen::try_resize(width > max_w ? max_w : width, height > max_h ? max_h : height);
   }
   void on_resize() final {
-    max_w = gfx.GetWidth(), max_h = gfx.GetHeight();
-    /*
-    unsigned sw, sh;
-    for (sw = max_w, sh = max_h; sw > w && sh > h; sw /= 2, sh /= 2) {}
-    if (sw < max_w) {
-    retry:
-      if (!gfx.Resize(sw, sh)) {
-        if (sw >= max_w) {
-          LOGMODULE("Screen");
-          LOGERR("Resize failed");
-        } else {
-          sw *= 2, sh *= 2;
-          goto retry;
-        }
-      }
-    }
-    */
-    offset_x = (max_w - w) / 2, offset_y = (max_h - h) / 2;
+    auto max_w = gfx.GetWidth(), max_h = gfx.GetHeight();
+    for (zoom = 1; w * zoom <= max_w && h * zoom <= max_h; zoom += 1) {}
+    if (zoom > 1) zoom -= 1;
+    offset_x = (max_w - w * zoom) / 2, offset_y = (max_h - h * zoom) / 2;
   }
 protected:
   TScreenColor color_from_12bit(u8 r, u8 g, u8 b, u8 index) const final {
     return COLOR16(r*2, g*2, b*2);
   }
-  void on_paint(const TScreenColor* pixels) final {
+  void on_paint() final {
     if (offset_x || offset_y) gfx.ClearScreen(palette[0]);
-    gfx.DrawImage(offset_x, offset_y, w, h, const_cast<TScreenColor*>(pixels));
+    if (zoom <= 1) {
+      gfx.DrawImage(offset_x, offset_y, w, h, const_cast<TScreenColor*>(pixels));
+    } else {
+      auto max_w = gfx.GetWidth();
+      TScreenColor* buf = gfx.GetBuffer();
+      for (unsigned x = 0; x < w; x++) {
+        for (unsigned y = 0; y < h; y++) {
+          unsigned pixel_ix = y * w + x;
+          for (unsigned xx = offset_x + x * zoom; xx < offset_x + (x+1) * zoom; xx++) {
+            for (unsigned yy = offset_y + y * zoom; yy < offset_y + (y+1) * zoom; yy++) {
+              buf[yy * max_w + xx] = pixels[pixel_ix];
+            }
+          }
+        }
+      }
+    }
     gfx.UpdateDisplay();
+  }
+};
+
+class CircleAudio : public Audio {
+  static constexpr size_t BUFSIZE = static_cast<size_t>(AUDIO_BUFSIZE);
+  static void need_data_callback(void* user_data) {
+    CircleAudio* self = reinterpret_cast<CircleAudio*>(user_data);
+    u8 buf[BUFSIZE];
+    self->write(buf, BUFSIZE);
+    self->device->Write(buf, BUFSIZE);
+  }
+
+  CSoundBaseDevice* device;
+
+public:
+  CircleAudio(Uxn& uxn, CSoundBaseDevice* device) : Audio(uxn), device(device) {}
+
+  bool init() final {
+    // if we have no audio device, don't bother
+    if (!device) return true;
+
+    device->SetWriteFormat(TSoundFormat::SoundFormatSigned16, 2);
+    device->RegisterNeedDataCallback(need_data_callback, this);
+
+    // Allocate a queue of AUDIO_BUFSIZE 16-bit frames.
+    // AUDIO_BUFSIZE is actually in bytes, so this is twice the buffer size.
+    // This is intentional: according to Circle's documentation,
+    // RegisterNeedDataCallback's callback is called when at least half
+    // of the queue is empty, so we can always safely write the full buffer.
+    return device->AllocateQueueFrames(BUFSIZE);
+  }
+
+  void start(u8 instance) final {
+    if (!device) return;
+    Audio::start(instance);
+    if (!device->IsActive()) device->Start();
   }
 };
 
@@ -105,6 +146,7 @@ public:
 class CircleVarvara : public Varvara {
   CircleConsole console;
   CircleScreen screen;
+  CircleAudio audio;
   Input input;
   CircleFilesystem file;
   CircleDatetime datetime;
@@ -113,21 +155,23 @@ class CircleVarvara : public Varvara {
 public:
   CircleVarvara(
     C2DGraphics& gfx,
+    CSoundBaseDevice* sound,
     CTimer& t,
     CLogger& logger,
     FATFS& fs,
     const char* rom_filename = "boot.rom"
   ) : console(*this, logger),
       screen(*this, gfx),
+      audio(*this, sound),
       input(*this),
       file(*this, fs, logger),
       datetime(t),
-      Varvara(&console, &screen, &input, &file, &datetime, rom_filename),
+      Varvara(&console, &screen, &audio, &input, &file, &datetime, rom_filename),
       gfx(gfx),
       timer(t) {}
 
   void game_pad_input(const TGamePadState* state);
-  void run();
+  ShutdownMode run(SafeShutdown* safe_shutdown = nullptr);
 };
 
 }

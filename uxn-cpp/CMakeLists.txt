@@ -16,7 +16,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 
 find_package(SDL2 REQUIRED)
 
-add_library(uxn uxn.cpp)
+add_library(uxn uxn.cpp varvara.cpp)
 target_compile_options(uxn PRIVATE -fno-exceptions)
 target_link_options(uxn PRIVATE -nostdlib)
 

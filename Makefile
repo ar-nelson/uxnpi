@@ -2,7 +2,7 @@
 
 CIRCLEHOME = ./circle
 
-OBJS	= main.o kernel.o circle_varvara.o uxn-cpp/uxn.o
+OBJS	= main.o kernel.o circle_varvara.o uxn-cpp/uxn.o uxn-cpp/varvara.o
 
 LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/lib/input/libinput.a \
@@ -10,6 +10,7 @@ LIBS	= $(CIRCLEHOME)/lib/usb/libusb.a \
 	  $(CIRCLEHOME)/addon/fatfs/libfatfs.a \
 	  $(CIRCLEHOME)/lib/fs/libfs.a \
 	  $(CIRCLEHOME)/lib/fs/fat/libfatfs.a \
+	  $(CIRCLEHOME)/lib/sound/libsound.a \
 	  $(CIRCLEHOME)/lib/libcircle.a
 
 # change this to empty string to build for actual hardware
@@ -35,7 +36,7 @@ roms.img: roms/*.* roms_img.sh
 
 clean:
 	cd $(CIRCLEHOME) && ./makeall clean
-	rm -f *.img *.elf *.map *.lst $(CIRCLEHOME)/Config.mk
+	rm -f *.img *.elf *.map *.lst *.o *.d uxn-cpp/*.o uxn-cpp/*.d $(CIRCLEHOME)/Config.mk
 
 # this is specific to my setup and probably won't work for anyone else
 # qemu-raspi is the special build of qemu for circle USB support

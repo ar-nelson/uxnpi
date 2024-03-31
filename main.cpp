@@ -9,15 +9,15 @@ int main(void) {
     halt();
     return EXIT_HALT;
   }
-  auto ShutdownMode = Kernel.run();
+  auto mode = Kernel.run();
 
-  switch (ShutdownMode) {
-  case ShutdownReboot:
-    reboot();
-    return EXIT_REBOOT;
-  case ShutdownHalt:
-  default:
-    halt();
-    return EXIT_HALT;
+  switch (mode) {
+    case ShutdownMode::Reboot:
+      reboot();
+      return EXIT_REBOOT;
+    case ShutdownMode::Halt:
+    default:
+      halt();
+      return EXIT_HALT;
   }
 }

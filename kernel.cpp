@@ -1,21 +1,27 @@
 #include "kernel.hpp"
 #include <circle/string.h>
 #include <circle/util.h>
+#include <circle/sound/pwmsoundbasedevice.h>
+//#include <circle/sound/i2ssoundbasedevice.h>
+#include <circle/sound/hdmisoundbasedevice.h>
 #include <assert.h>
 
 #define DEVICE_INDEX  1    // "upad1"
-#define FILENAME      "tet.rom"
+#define FILENAME      "launcher.rom"
 
 CKernel* CKernel::instance = 0;
 
 static const char FromKernel[] = "kernel";
-static const char FromUxn[] = "uxn";
 
 CKernel::CKernel() :
   screen(640, 480), gfx(640, 480),
+  // gpio(&interrupt),
+  // i2c(CMachineInfo::Get()->GetDevice(DeviceI2CMaster), TRUE),
   timer(&interrupt), logger(options.GetLogLevel(), &timer),
   usb_hci(&interrupt, &timer, TRUE /* TRUE = enable PnP */),
-  emmc(&interrupt, &timer, &act_led), game_pad(0)
+  emmc(&interrupt, &timer, &act_led),
+  // safe_shutdown(&gpio, &logger),
+  game_pad(0)
 {
   instance = this;
 }
@@ -35,9 +41,12 @@ bool CKernel::initialize() {
     OK = logger.Initialize(target ? target : &screen);
   }
   if (OK) OK = interrupt.Initialize();
+  //if (OK) OK = gpio.Initialize();
+  //if (OK) OK = i2c.Initialize();
   if (OK) OK = timer.Initialize();
   if (OK) OK = usb_hci.Initialize();
   if (OK) OK = emmc.Initialize();
+  //if (OK) OK = safe_shutdown.Initialize();
   if (OK) {
     if (f_mount(&fs, "SD:", 1) != FR_OK) {
       logger.Write(FromKernel, LogPanic, "Cannot mount drive SD:");
@@ -87,15 +96,36 @@ ShutdownMode CKernel::run() {
   }
 no_gamepad:;
 
+  // Initialize sound
+  const char* sound_device = options.GetSoundDevice();
+  CSoundBaseDevice* sound = nullptr;
+  constexpr unsigned SAMPLE_RATE = 48000; // overall system clock
+  constexpr unsigned CHUNK_SIZE = 384 * 10; // number of samples, written to sound device at once
+  if (strcmp (sound_device, "sndpwm") == 0) {
+    logger.Write("Audio", LogNotice, "Found PWM sound device");
+    sound = new CPWMSoundBaseDevice(&interrupt, SAMPLE_RATE, CHUNK_SIZE);
+  } else if (strcmp (sound_device, "sndi2s") == 0) {
+    // TODO: Figure out how to make this device work with the Case 2W.
+    //logger.Write("Audio", LogNotice, "Found I2S sound device");
+    //sound = new CI2SSoundBaseDevice(&interrupt, SAMPLE_RATE, CHUNK_SIZE, FALSE, &i2c, 0);
+  } else if (strcmp (sound_device, "sndhdmi") == 0) {
+    logger.Write("Audio", LogNotice, "Found HDMI sound device");
+    sound = new CHDMISoundBaseDevice(&interrupt, SAMPLE_RATE, CHUNK_SIZE);
+  } else {
+    logger.Write("Audio", LogWarning, "No sound device found!");
+  }
+
   // Enter the uxn interpreter
-  varvara = new uxn::CircleVarvara(gfx, timer, logger, fs, FILENAME);
+  auto shutdown_mode = ShutdownMode::Halt;
+  varvara = new uxn::CircleVarvara(gfx, nullptr, timer, logger, fs, FILENAME);
   if (!varvara->init()) {
     logger.Write(FromKernel, LogPanic, "Varvara init failed");
   } else {
-    varvara->run();
+    shutdown_mode = varvara->run(/*&safe_shutdown*/);
   }
 
-  return ShutdownHalt;
+  if (sound_device) delete sound_device;
+  return shutdown_mode;
 }
 
 void CKernel::GamePadStatusHandler(unsigned device_index, const TGamePadState *state) {
